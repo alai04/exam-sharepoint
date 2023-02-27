@@ -26,6 +26,8 @@ type Event struct {
 
 var (
 	tickers []string
+	client  *gosip.SPClient
+	sp      *api.SP
 )
 
 func init() {
@@ -37,18 +39,6 @@ func init() {
 	ticker_list := os.Getenv("TICKER_LIST")
 	tickers = strings.Split(ticker_list, ",")
 	fmt.Println(len(tickers), "Tickers:", tickers)
-}
-
-func main() {
-
-	// authCnfg := &strategy.AuthCnfg{
-	// 	SiteURL:  os.Getenv("SPAUTH_SITEURL"),
-	// 	TenantID: os.Getenv("AZURE_TENANT_ID"),
-	// 	ClientID: os.Getenv("AZURE_CLIENT_ID"),
-	// 	CertPath: os.Getenv("AZURE_CERTIFICATE_PATH"),
-	// 	CertPass: os.Getenv("AZURE_CERTIFICATE_PASSWORD"),
-	// }
-	// or using `private.json` creds source
 
 	authCnfg := &strategy.AuthCnfg{}
 	configPath := "./config/private.json"
@@ -56,8 +46,8 @@ func main() {
 		log.Fatalf("unable to get config: %v", err)
 	}
 
-	client := &gosip.SPClient{AuthCnfg: authCnfg}
-	sp := api.NewSP(client)
+	client = &gosip.SPClient{AuthCnfg: authCnfg}
+	sp = api.NewSP(client)
 
 	res, err := sp.Web().Select("Title").Get()
 	if err != nil {
@@ -65,36 +55,16 @@ func main() {
 	}
 
 	fmt.Printf("Site title: %s\n", res.Data().Title)
+}
 
+func main() {
 	list := sp.Web().GetList("Lists/Earnings Calendar")
 	itemsResp, err := list.Items().OrderBy("Id", true).Get()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// fmt.Println(string(itemsResp))
 	fmt.Printf("There are %d items in Earnings Calendar\n", len(itemsResp.Data()))
-	// m := make(map[string]interface{})
-	// err = json.Unmarshal(itemsResp, &m)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// for k, v := range m {
-	// 	fmt.Printf("%v: %v\n", k, v)
-	// }
-	// for _, item := range itemsResp.Data() {
-	// 	itemData := item.Data()
-	// 	fmt.Printf("ID: %d, Title: %s\n", itemData.ID, itemData.Title)
-	// }
-
-	// fmt.Println("Add a event to calendar...")
-	// event := &Event{
-	// 	Title:       "MSFT",
-	// 	EventDate:   "2023-01-25T00:00:00Z",
-	// 	EndDate:     "2023-01-25T23:59:59Z",
-	// 	Description: "For test 999",
-	// 	AllDay:      true,
-	// }
 	for _, ticker := range tickers {
 		ev, err := getEarningsDate(ticker)
 		if err != nil {
@@ -103,13 +73,9 @@ func main() {
 		}
 		fmt.Println(ev)
 
-		itemPayload, _ := json.Marshal(ev)
-		itemAddRes, err := list.Items().Add(itemPayload)
-		if err != nil {
-			log.Fatal(err)
+		if err = update1Ticker(list, ev); err != nil {
+			log.Println(err)
 		}
-		// fmt.Printf("Raw response: %s\n", itemAddRes)
-		fmt.Printf("Added item's ID: %d\n", itemAddRes.Data().ID)
 	}
 }
 
@@ -120,10 +86,12 @@ func getEarningsDate(ticker string) (ev Event, err error) {
 		return
 	}
 
+	// fmt.Printf("%+v", q)
+
 	ev.Title = q.Symbol
 	ev.Description = q.LongName
-	ev.EventDate = timestamp2string(q.EarningsTimestampStart)
-	ev.EndDate = timestamp2string(q.EarningsTimestampEnd)
+	ev.EventDate = timestamp2string(q.EarningsTimestamp)
+	ev.EndDate = timestamp2string(q.EarningsTimestamp)
 	ev.AllDay = true
 	return
 }
@@ -131,4 +99,49 @@ func getEarningsDate(ticker string) (ev Event, err error) {
 func timestamp2string(ts int) string {
 	tm := time.Unix(int64(ts), 0)
 	return tm.Format("2006-01-02T15:04:05Z")
+}
+
+func update1Ticker(list *api.List, ev Event) error {
+	if len(ev.Title) == 0 {
+		return nil
+	}
+
+	caml := fmt.Sprintf(`
+		<View>
+			<Query>
+				<Where>
+					<Eq>
+						<FieldRef Name='Title' />
+						<Value Type='Text'>%s</Value>
+					</Eq>
+				</Where>
+			</Query>
+		</View>
+	`, ev.Title)
+
+	itemsResp, err := list.Items().GetByCAML(caml)
+	if err != nil {
+		return err
+	}
+
+	itemPayload, _ := json.Marshal(ev)
+
+	if len(itemsResp.Data()) == 0 {
+		fmt.Printf("Adding Title: %s\n", ev.Title)
+		_, err := list.Items().Add(itemPayload)
+		return err
+	}
+
+	for _, item := range itemsResp.Data() {
+		itemData := item.Data()
+		fmt.Printf("Updating ID: %d, Title: %s\n", itemData.ID, itemData.Title)
+
+		_, err := list.Items().GetByID(itemData.ID).Update(itemPayload)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+	}
+
+	return nil
 }
