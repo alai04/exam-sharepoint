@@ -90,8 +90,8 @@ func getEarningsDate(ticker string) (ev Event, err error) {
 
 	ev.Title = q.Symbol
 	ev.Description = q.LongName
-	ev.EventDate = timestamp2string(q.EarningsTimestamp)
-	ev.EndDate = timestamp2string(q.EarningsTimestamp)
+	ev.EventDate = timestamp2string(q.EarningsTimestampStart)
+	ev.EndDate = timestamp2string(q.EarningsTimestampStart)
 	ev.AllDay = true
 	return
 }
