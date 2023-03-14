@@ -88,7 +88,7 @@ func getEarningsDate(ticker string) (ev Event, err error) {
 
 	// fmt.Printf("%+v", q)
 
-	ev.Title = q.Symbol
+	ev.Title = q.ShortName
 	ev.Description = q.LongName
 	ev.EventDate = timestamp2string(q.EarningsTimestampStart)
 	ev.EndDate = timestamp2string(q.EarningsTimestampStart)
