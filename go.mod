@@ -12,3 +12,5 @@ require (
 )
 
 require github.com/shopspring/decimal v1.3.1 // indirect
+
+replace github.com/piquette/finance-go v1.0.0 => github.com/alai04/finance-go v1.0.1
