@@ -47,7 +47,6 @@ def update1Ticker(tk):
         'Title': tk['name'],
         'field_2': '{0:.2f}'.format(tk['cp']),
         'field_3': '{0:.2f}'.format(tk['tp']),
-        'field_4': '{0:.1f}'.format((tk['tp']/tk['cp']-1.0)*100),
     }
     items = list.items.filter(filter_text).get().execute_query()
     if len(items) == 0:
